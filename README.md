@@ -19,5 +19,13 @@ Proyecto final desarrollado en Python con SQLite.
 
 ## Ejecución del sistema
 
-```bash
+```markdown
+## Nota importante
+### 1. Clonar el repositorio
+
+ejecutar:
+
+python seed_transacciones.py
+
 python main.py
+
