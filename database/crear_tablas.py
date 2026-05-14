@@ -5,6 +5,8 @@ def crear_tablas():
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
+    cursor.execute("PRAGMA foreign_keys = ON")
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transacciones_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +32,19 @@ def crear_tablas():
             monto REAL NOT NULL CHECK(monto > 0),
             tipo_comprobante TEXT NOT NULL,
             cliente TEXT NOT NULL,
-            estado_conciliacion TEXT DEFAULT 'pendiente'
+            estado_conciliacion TEXT DEFAULT 'pendiente',
+            UNIQUE(serie, numero_documento)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conciliacion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaccion_id INTEGER NOT NULL UNIQUE,
+            comprobante_id INTEGER NOT NULL UNIQUE,
+            fecha_conciliacion TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(transaccion_id) REFERENCES transacciones_bancarias(id),
+            FOREIGN KEY(comprobante_id) REFERENCES comprobantes(id)
         )
     """)
 
