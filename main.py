@@ -5,7 +5,6 @@ from modules.estadisticas import menu_estadisticas
 from database.crear_tablas import crear_tablas
 from database.cargar_tablas import cargar_tablas
 
-
 def menu_principal():
     crear_tablas()
     cargar_tablas()

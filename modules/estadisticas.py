@@ -9,7 +9,7 @@ def menu_estadisticas():
         opcion = input("Seleccione una opción: ")
 
         if opcion == "1":
-            print("Pendiente: Jesús implementará monto conciliado.")
+            print("Pendiente: Jesús implementará monto conciliado2222.")
         elif opcion == "2":
             print("Pendiente: Jesús implementará facturas conciliadas.")
         elif opcion == "3":
