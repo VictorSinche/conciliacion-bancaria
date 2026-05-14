@@ -356,7 +356,7 @@ def menu_comprobantes():
     while True:
         print("\n===== MÓDULO DE COMPROBANTES DE PAGO =====")
         print("1. Registrar comprobante")
-        print("2. Listar comprobantes test")
+        print("2. Listar comprobantes")
         print("3. Listar comprobantes sin pagar")
         print("4. Registrar fecha de pago")
         print("5. Buscar por serie y número")
