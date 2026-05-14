@@ -1,3 +1,170 @@
+import re
+
+from database.conexion import obtener_conexion
+
+
+def _extraer_referencias(descripcion):
+    if not descripcion:
+        return set()
+
+    referencias = re.findall(r"\b([A-Za-z0-9]+-[A-Za-z0-9]+)\b", descripcion.upper())
+    return set(referencias)
+
+
+def _cargar_listas_pendientes(cursor):
+    cursor.execute(
+        """
+        SELECT id, fecha_operacion, numero_operacion, monto, descripcion
+        FROM transacciones_bancarias
+        WHERE estado_conciliacion = 'pendiente'
+          AND tipo_operacion = 'credito'
+        ORDER BY fecha_operacion ASC, id ASC
+        """
+    )
+    transacciones = []
+    for fila in cursor.fetchall():
+        transacciones.append(
+            {
+                "id": fila[0],
+                "fecha_operacion": fila[1],
+                "numero_operacion": fila[2],
+                "monto": fila[3],
+                "descripcion": fila[4] or "",
+                "estado_conciliacion": "pendiente",
+            }
+        )
+
+    cursor.execute(
+        """
+        SELECT id, serie, numero_documento, fecha_emision, monto
+        FROM comprobantes
+        WHERE estado_conciliacion = 'pendiente'
+        ORDER BY fecha_emision ASC, id ASC
+        """
+    )
+    comprobantes = []
+    for fila in cursor.fetchall():
+        comprobantes.append(
+            {
+                "id": fila[0],
+                "serie": fila[1],
+                "numero_documento": fila[2],
+                "fecha_emision": fila[3],
+                "monto": fila[4],
+                "estado_conciliacion": "pendiente",
+            }
+        )
+
+    return transacciones, comprobantes
+
+
+def _conciliar_en_memoria(transacciones, comprobantes):
+    conciliaciones = []
+
+    for transaccion in transacciones:
+        if transaccion["estado_conciliacion"] != "pendiente":
+            continue
+
+        referencias = _extraer_referencias(transaccion["descripcion"])
+        comprobante_encontrado = None
+
+        if referencias:
+            for comprobante in comprobantes:
+                if comprobante["estado_conciliacion"] != "pendiente":
+                    continue
+
+                referencia = f"{comprobante['serie']}-{comprobante['numero_documento']}".upper()
+                if referencia in referencias:
+                    comprobante_encontrado = comprobante
+                    break
+
+        if not comprobante_encontrado:
+            for comprobante in comprobantes:
+                if comprobante["estado_conciliacion"] != "pendiente":
+                    continue
+
+                if (
+                    transaccion["monto"] == comprobante["monto"]
+                    and transaccion["fecha_operacion"] >= comprobante["fecha_emision"]
+                ):
+                    comprobante_encontrado = comprobante
+                    break
+
+        if comprobante_encontrado:
+            transaccion["estado_conciliacion"] = "conciliado"
+            comprobante_encontrado["estado_conciliacion"] = "conciliado"
+            conciliaciones.append(
+                {
+                    "transaccion_id": transaccion["id"],
+                    "numero_operacion": transaccion["numero_operacion"],
+                    "comprobante_id": comprobante_encontrado["id"],
+                    "referencia_comprobante": f"{comprobante_encontrado['serie']}-{comprobante_encontrado['numero_documento']}",
+                }
+            )
+
+    return conciliaciones
+
+
+def _persistir_conciliaciones(cursor, conciliaciones):
+    for relacion in conciliaciones:
+        cursor.execute(
+            """
+            UPDATE transacciones_bancarias
+            SET estado_conciliacion = 'conciliado'
+            WHERE id = ?
+            """,
+            (relacion["transaccion_id"],),
+        )
+
+        cursor.execute(
+            """
+            UPDATE comprobantes
+            SET estado_conciliacion = 'conciliado'
+            WHERE id = ?
+            """,
+            (relacion["comprobante_id"],),
+        )
+
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO conciliacion (transaccion_id, comprobante_id)
+            VALUES (?, ?)
+            """,
+            (relacion["transaccion_id"], relacion["comprobante_id"]),
+        )
+
+
+def ejecutar_conciliacion_semi_automatica():
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+
+    transacciones, comprobantes = _cargar_listas_pendientes(cursor)
+
+    if not transacciones:
+        conexion.close()
+        print("No hay transacciones de ingreso pendientes por conciliar.")
+        return
+
+    conciliaciones = _conciliar_en_memoria(transacciones, comprobantes)
+    _persistir_conciliaciones(cursor, conciliaciones)
+
+    conexion.commit()
+    conexion.close()
+
+    print("\n===== RESULTADO DE CONCILIACIÓN =====")
+    print(f"Total transacciones evaluadas: {len(transacciones)}")
+    print(f"Total conciliadas: {len(conciliaciones)}")
+
+    if conciliaciones:
+        print("\nRelaciones generadas:")
+        for relacion in conciliaciones:
+            print(
+                f"- Operación {relacion['numero_operacion']} => "
+                f"Comprobante {relacion['referencia_comprobante']}"
+            )
+
+
 def menu_conciliacion():
     while True:
         print("\n===== MÓDULO DE CONCILIACIÓN =====")
@@ -9,7 +176,7 @@ def menu_conciliacion():
         opcion = input("Seleccione una opción: ")
 
         if opcion == "1":
-            print("Pendiente: Marco implementará la conciliación.")
+            ejecutar_conciliacion_semi_automatica()
         elif opcion == "2":
             print("Pendiente: Marco implementará consulta de conciliados.")
         elif opcion == "3":
