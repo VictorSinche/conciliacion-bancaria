@@ -25,15 +25,22 @@ def crear_tablas():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS comprobantes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            serie TEXT NOT NULL,
-            numero_documento TEXT NOT NULL,
-            fecha_emision TEXT NOT NULL,
-            moneda TEXT NOT NULL CHECK(moneda IN ('PEN', 'USD')),
-            monto REAL NOT NULL CHECK(monto > 0),
             tipo_comprobante TEXT NOT NULL,
-            cliente TEXT NOT NULL,
+            tipo_codigo TEXT NOT NULL CHECK(tipo_codigo IN ('01', '03', '07', '08')),
+            serie TEXT NOT NULL,
+            numero_correlativo TEXT NOT NULL,
+            fecha_emision TEXT NOT NULL,
+            fecha_vencimiento TEXT NOT NULL,
+            fecha_pago TEXT,
+            ruc_dni TEXT NOT NULL,
+            nombre_emisor TEXT NOT NULL,
+            moneda TEXT NOT NULL CHECK(moneda IN ('PEN', 'USD')),
+            subtotal REAL NOT NULL CHECK(subtotal > 0),
+            igv REAL NOT NULL,
+            total REAL NOT NULL CHECK(total > 0),
             estado_conciliacion TEXT DEFAULT 'pendiente',
-            UNIQUE(serie, numero_documento)
+            fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(serie, numero_correlativo)
         )
     """)
 
