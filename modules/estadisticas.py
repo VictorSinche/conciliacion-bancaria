@@ -1,3 +1,22 @@
+from database.conexion import obtener_conexion
+
+
+def monto_soles_conciliados():
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(monto), 0)
+        FROM transacciones_bancarias
+        WHERE estado_conciliacion = 'conciliado'
+          AND moneda = 'PEN'
+    """)
+    total = cursor.fetchone()[0]
+    conexion.close()
+
+    print("MONTO EN SOLES CONCILIADOS")
+    print(f"Total conciliado en PEN: S/. {total:.2f}")
+
 def menu_estadisticas():
     while True:
         print("\n===== MÓDULO DE ESTADÍSTICAS =====")
@@ -9,7 +28,7 @@ def menu_estadisticas():
         opcion = input("Seleccione una opción: ")
 
         if opcion == "1":
-            print("Pendiente: Jesús implementará monto conciliado2222.")
+            monto_soles_conciliados()
         elif opcion == "2":
             print("Pendiente: Jesús implementará facturas conciliadas.")
         elif opcion == "3":

@@ -11,11 +11,11 @@ TRANSACCIONES_INICIALES = [
 ]
 
 COMPROBANTES_INICIALES = [
-    ("F001", "1001", "2026-05-01", "PEN", 1500.00, "factura", "Cliente Andino", "pendiente"),
-    ("F001", "1002", "2026-05-02", "USD", 1200.00, "factura", "Global Export", "pendiente"),
-    ("F001", "1003", "2026-05-03", "PEN", 3000.00, "factura", "ACME S.A.", "conciliado"),
-    ("F001", "1004", "2026-05-09", "PEN", 900.00, "factura", "Cliente Norte", "pendiente"),
-    ("B001", "2001", "2026-05-06", "PEN", 700.00, "boleta", "Cliente Retail", "conciliado"),
+    ("factura", "01", "F001", "00001001", "2026-05-01", "2026-05-31", None, "20100000001", "Cliente Andino", "PEN", 1271.19, 228.81, 1500.00, "pendiente"),
+    ("factura", "01", "F001", "00001002", "2026-05-02", "2026-05-31", None, "20100000002", "Global Export", "USD", 1016.95, 183.05, 1200.00, "pendiente"),
+    ("factura", "01", "F001", "00001003", "2026-05-03", "2026-05-31", "2026-05-05", "20100000003", "ACME S.A.", "PEN", 2542.37, 457.63, 3000.00, "conciliado"),
+    ("factura", "01", "F001", "00001004", "2026-05-09", "2026-05-31", None, "20100000004", "Cliente Norte", "PEN", 762.71, 137.29, 900.00, "pendiente"),
+    ("boleta", "03", "B001", "00002001", "2026-05-06", "2026-05-06", "2026-05-08", "10100000001", "Cliente Retail", "PEN", 593.22, 106.78, 700.00, "conciliado"),
 ]
 
 PARES_CONCILIADOS = [
@@ -54,20 +54,26 @@ def cargar_tablas():
     cursor.executemany(
         """
         INSERT INTO comprobantes (
-            serie,
-            numero_documento,
-            fecha_emision,
-            moneda,
-            monto,
             tipo_comprobante,
-            cliente,
+            tipo_codigo,
+            serie,
+            numero_correlativo,
+            fecha_emision,
+            fecha_vencimiento,
+            fecha_pago,
+            ruc_dni,
+            nombre_emisor,
+            moneda,
+            subtotal,
+            igv,
+            total,
             estado_conciliacion
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         COMPROBANTES_INICIALES,
     )
 
-    for numero_operacion, serie, numero_documento in PARES_CONCILIADOS:
+    for numero_operacion, serie, numero_correlativo in PARES_CONCILIADOS:
         cursor.execute(
             """
             SELECT id
@@ -82,9 +88,9 @@ def cargar_tablas():
             """
             SELECT id
             FROM comprobantes
-            WHERE serie = ? AND numero_documento = ?
+            WHERE serie = ? AND numero_correlativo = ?
             """,
-            (serie, numero_documento),
+            (serie, numero_correlativo),
         )
         comprobante = cursor.fetchone()
 
