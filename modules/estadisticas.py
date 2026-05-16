@@ -1,6 +1,6 @@
 from database.conexion import obtener_conexion
 
-
+# Estadísticas de monto en soles conciliados
 def monto_soles_conciliados():
     conexion = obtener_conexion()
     cursor = conexion.cursor()
@@ -17,6 +17,56 @@ def monto_soles_conciliados():
     print("MONTO EN SOLES CONCILIADOS")
     print(f"Total conciliado en PEN: S/. {total:.2f}")
 
+# Estadísticas de facturas conciliadas  
+def facturas_conciliadas():
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*), COALESCE(SUM(total), 0)
+        FROM comprobantes
+        WHERE estado_conciliacion = 'conciliado'
+          AND tipo_codigo = '01'
+    """)
+    resultado = cursor.fetchone()
+    conexion.close()
+
+    cantidad = resultado[0]
+    total = resultado[1]
+
+    print("\n===== FACTURAS CONCILIADAS =====")
+    print(f"Número de facturas conciliadas : {cantidad}")
+    print(f"Monto total conciliado         : {total:.2f}")
+
+# Estadísticas de ingresos del mes por conciliación
+def ingresos_mes_conciliacion():
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+
+    cursor.execute("""
+        SELECT strftime('%Y-%m', fecha_operacion) AS mes,
+               COUNT(*) AS cantidad,
+               SUM(monto) AS total
+        FROM transacciones_bancarias
+        WHERE estado_conciliacion = 'conciliado'
+          AND tipo_operacion = 'credito'
+        GROUP BY mes
+        ORDER BY mes DESC
+    """)
+    resultados = cursor.fetchall()
+    conexion.close()
+
+    print("\n===== INGRESOS DEL MES POR CONCILIACIÓN =====")
+
+    if not resultados:
+        print("No hay ingresos conciliados registrados.")
+        return
+
+    for fila in resultados:
+        print(f"Mes: {fila[0]} | Transacciones: {fila[1]} | Total: S/. {fila[2]:.2f}")
+
+
+# Menú de estadísticas
 def menu_estadisticas():
     while True:
         print("\n===== MÓDULO DE ESTADÍSTICAS =====")
@@ -30,9 +80,9 @@ def menu_estadisticas():
         if opcion == "1":
             monto_soles_conciliados()
         elif opcion == "2":
-            print("Pendiente: Jesús implementará facturas conciliadas.")
+            facturas_conciliadas()
         elif opcion == "3":
-            print("Pendiente: Jesús implementará ingresos del mes.")
+            ingresos_mes_conciliacion()
         elif opcion == "4":
             break
         else:
