@@ -1,58 +1,80 @@
 from database.conexion import obtener_conexion
 
-# Estadísticas de monto en soles conciliados
+
 def monto_soles_conciliados():
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
     cursor.execute("""
-        SELECT COALESCE(SUM(monto), 0)
-        FROM transacciones_bancarias
-        WHERE estado_conciliacion = 'conciliado'
-          AND moneda = 'PEN'
+        SELECT COALESCE(SUM(t.monto), 0)
+        FROM conciliacion c
+        INNER JOIN transacciones_bancarias t
+            ON c.transaccion_id = t.id
+        WHERE t.moneda = 'PEN'
+          AND t.estado_conciliacion = 'conciliado'
     """)
+
     total = cursor.fetchone()[0]
     conexion.close()
 
-    print("MONTO EN SOLES CONCILIADOS")
+    print("\n===== MONTO EN SOLES CONCILIADOS =====")
     print(f"Total conciliado en PEN: S/. {total:.2f}")
 
-# Estadísticas de facturas conciliadas  
+
 def facturas_conciliadas():
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
     cursor.execute("""
-        SELECT COUNT(*), COALESCE(SUM(total), 0)
-        FROM comprobantes
-        WHERE estado_conciliacion = 'conciliado'
-          AND tipo_codigo = '01'
+        SELECT co.moneda,
+               COUNT(*) AS cantidad,
+               COALESCE(SUM(co.total), 0) AS total
+        FROM conciliacion c
+        INNER JOIN comprobantes co
+            ON c.comprobante_id = co.id
+        WHERE co.tipo_codigo = '01'
+          AND co.estado_conciliacion = 'conciliado'
+        GROUP BY co.moneda
+        ORDER BY co.moneda
     """)
-    resultado = cursor.fetchone()
+
+    resultados = cursor.fetchall()
     conexion.close()
 
-    cantidad = resultado[0]
-    total = resultado[1]
-
     print("\n===== FACTURAS CONCILIADAS =====")
-    print(f"Número de facturas conciliadas : {cantidad}")
-    print(f"Monto total conciliado         : {total:.2f}")
 
-# Estadísticas de ingresos del mes por conciliación
+    if not resultados:
+        print("No hay facturas conciliadas registradas.")
+        return
+
+    total_facturas = 0
+
+    for moneda, cantidad, total in resultados:
+        total_facturas += cantidad
+        simbolo = "S/." if moneda == "PEN" else "$"
+        print(f"Moneda: {moneda} | Facturas: {cantidad} | Monto: {simbolo} {total:.2f}")
+
+    print(f"Total de facturas conciliadas: {total_facturas}")
+
+
 def ingresos_mes_conciliacion():
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
     cursor.execute("""
-        SELECT strftime('%Y-%m', fecha_operacion) AS mes,
+        SELECT strftime('%Y-%m', t.fecha_operacion) AS mes,
+               t.moneda,
                COUNT(*) AS cantidad,
-               SUM(monto) AS total
-        FROM transacciones_bancarias
-        WHERE estado_conciliacion = 'conciliado'
-          AND tipo_operacion = 'credito'
-        GROUP BY mes
-        ORDER BY mes DESC
+               COALESCE(SUM(t.monto), 0) AS total
+        FROM conciliacion c
+        INNER JOIN transacciones_bancarias t
+            ON c.transaccion_id = t.id
+        WHERE t.estado_conciliacion = 'conciliado'
+          AND t.tipo_operacion = 'credito'
+        GROUP BY mes, t.moneda
+        ORDER BY mes DESC, t.moneda
     """)
+
     resultados = cursor.fetchall()
     conexion.close()
 
@@ -62,11 +84,14 @@ def ingresos_mes_conciliacion():
         print("No hay ingresos conciliados registrados.")
         return
 
-    for fila in resultados:
-        print(f"Mes: {fila[0]} | Transacciones: {fila[1]} | Total: S/. {fila[2]:.2f}")
+    for mes, moneda, cantidad, total in resultados:
+        simbolo = "S/." if moneda == "PEN" else "$"
+        print(
+            f"Mes: {mes} | Moneda: {moneda} | "
+            f"Transacciones: {cantidad} | Total: {simbolo} {total:.2f}"
+        )
 
 
-# Menú de estadísticas
 def menu_estadisticas():
     while True:
         print("\n===== MÓDULO DE ESTADÍSTICAS =====")
@@ -75,7 +100,7 @@ def menu_estadisticas():
         print("3. Ingresos del mes por conciliación")
         print("4. Volver al menú principal")
 
-        opcion = input("Seleccione una opción: ")
+        opcion = input("Seleccione una opción: ").strip()
 
         if opcion == "1":
             monto_soles_conciliados()

@@ -1,45 +1,13 @@
-from database.conexion import obtener_conexion
+import sqlite3
 from datetime import datetime
-
-
-
-def validar_fecha(fecha_str, required=False):
-    if not fecha_str:
-        return None if not required else False
-    try:
-        datetime.strptime(fecha_str, "%Y-%m-%d")
-        return fecha_str
-    except ValueError:
-        return False
-
-
-def validar_serie_para_tipo(serie, tipo_codigo):
-    if not serie:
-        return (False, "La serie no puede estar vacía.")
-    if len(serie) > 4:
-        return (False, "La serie no puede exceder 4 caracteres.")
-    prefijo = SERIES_VALIDAS.get(tipo_codigo)
-    if prefijo and not serie.startswith(prefijo):
-        return (False, f"La serie debe comenzar con '{prefijo}' para el tipo seleccionado.")
-    return (True, None)
-
-
-def validar_y_normalizar_numero(numero):
-    if not numero:
-        return (False, "El número correlativo no puede estar vacío.")
-    if not numero.isdigit():
-        return (False, "El número correlativo debe contener solo dígitos.")
-    if len(numero) > 8:
-        return (False, "El número correlativo no puede exceder 8 caracteres.")
-    numero_padded = numero.zfill(8)
-    return (True, numero_padded)
+from database.conexion import obtener_conexion
 
 
 TIPOS_COMPROBANTE = {
-    "01": "Factura",
-    "03": "Boleta de venta",
-    "07": "Nota de crédito",
-    "08": "Nota de débito",
+    "01": ("factura", "Factura"),
+    "03": ("boleta", "Boleta de venta"),
+    "07": ("nota_credito", "Nota de crédito"),
+    "08": ("nota_debito", "Nota de débito"),
 }
 
 SERIES_VALIDAS = {
@@ -50,14 +18,55 @@ SERIES_VALIDAS = {
 }
 
 
+def validar_fecha(fecha_str, requerida=False):
+    if not fecha_str:
+        return False if requerida else None
+
+    try:
+        datetime.strptime(fecha_str, "%Y-%m-%d")
+        return fecha_str
+    except ValueError:
+        return False
+
+
+def validar_serie(serie, tipo_codigo=None):
+    if not serie:
+        return False, "La serie no puede estar vacía."
+
+    if len(serie) > 4:
+        return False, "La serie no puede exceder 4 caracteres."
+
+    if tipo_codigo:
+        prefijo = SERIES_VALIDAS.get(tipo_codigo)
+
+        if prefijo and not serie.startswith(prefijo):
+            return False, f"La serie debe comenzar con '{prefijo}' para el tipo seleccionado."
+
+    return True, None
+
+
+def validar_numero_correlativo(numero):
+    if not numero:
+        return False, "El número correlativo no puede estar vacío."
+
+    if not numero.isdigit():
+        return False, "El número correlativo debe contener solo dígitos."
+
+    if len(numero) > 8:
+        return False, "El número correlativo no puede exceder 8 caracteres."
+
+    return True, numero.zfill(8)
+
+
 def mostrar_comprobante(item):
     print(
         f"ID: {item[0]} | Fecha emisión: {item[1]} | "
-        f"Vencimiento: {item[2] or 'N/A'} | Fecha pago: {item[3] or 'Sin pagar'} | "
-        f"Tipo: {item[4]} | Serie: {item[5]}-{item[6]} | "
-        f"RUC/DNI: {item[7]} | Emisor: {item[8]} | "
+        f"Vencimiento: {item[2]} | Fecha pago: {item[3] or 'Sin pagar'} | "
+        f"Tipo: {item[4]} | Documento: {item[5]}-{item[6]} | "
+        f"RUC/DNI: {item[7]} | Cliente: {item[8]} | "
         f"Moneda: {item[9]} | Subtotal: {item[10]:.2f} | "
-        f"IGV: {item[11]:.2f} | Total: {item[12]:.2f} | Estado: {item[13]}"
+        f"IGV: {item[11]:.2f} | Total: {item[12]:.2f} | "
+        f"Estado: {item[13]}"
     )
 
 
@@ -65,69 +74,81 @@ def registrar_comprobante():
     print("\n===== REGISTRAR COMPROBANTE DE PAGO =====")
 
     print("Tipos de comprobante:")
-    for codigo, nombre in TIPOS_COMPROBANTE.items():
-        print(f"  {codigo} - {nombre}")
+    for codigo, datos in TIPOS_COMPROBANTE.items():
+        print(f"  {codigo} - {datos[1]}")
 
     tipo_codigo = input("Seleccione tipo (01/03/07/08): ").strip()
+
     if tipo_codigo not in TIPOS_COMPROBANTE:
         print("Tipo de comprobante inválido.")
         return
 
-    tipo_nombre = TIPOS_COMPROBANTE[tipo_codigo]
+    tipo_bd = TIPOS_COMPROBANTE[tipo_codigo][0]
+    tipo_nombre = TIPOS_COMPROBANTE[tipo_codigo][1]
 
     serie = input(f"Serie (ej. {SERIES_VALIDAS[tipo_codigo]}001): ").strip().upper()
-    ok, msg = validar_serie_para_tipo(serie, tipo_codigo)
+
+    ok, mensaje = validar_serie(serie, tipo_codigo)
     if not ok:
-        print(msg)
+        print(mensaje)
         return
 
-    numero_input = input("Número correlativo (ej. 00000123): ").strip()
-    ok, numero = validar_y_normalizar_numero(numero_input)
+    numero_input = input("Número correlativo: ").strip()
+
+    ok, numero = validar_numero_correlativo(numero_input)
     if not ok:
         print(numero)
         return
 
     fecha_emision = input("Fecha de emisión (YYYY-MM-DD): ").strip()
-    fecha_emision_val = validar_fecha(fecha_emision, required=True)
+    fecha_emision_val = validar_fecha(fecha_emision, requerida=True)
+
     if fecha_emision_val is False:
         print("Fecha de emisión inválida. Use el formato YYYY-MM-DD.")
         return
 
     fecha_vencimiento = input("Fecha de vencimiento (YYYY-MM-DD), Enter si es al contado: ").strip()
-    fecha_vencimiento_val = validar_fecha(fecha_vencimiento, required=False)
+    fecha_vencimiento_val = validar_fecha(fecha_vencimiento)
+
     if fecha_vencimiento_val is False:
         print("Fecha de vencimiento inválida. Use el formato YYYY-MM-DD.")
         return
-    if not fecha_vencimiento_val:
+
+    if fecha_vencimiento_val is None:
         fecha_vencimiento_val = fecha_emision_val
 
     fecha_pago = input("Fecha de pago real (YYYY-MM-DD), Enter si aún no se pagó: ").strip()
-    fecha_pago_val = validar_fecha(fecha_pago, required=False)
+    fecha_pago_val = validar_fecha(fecha_pago)
+
     if fecha_pago_val is False:
         print("Fecha de pago inválida. Use el formato YYYY-MM-DD.")
         return
-    fecha_pago_val = fecha_pago_val if fecha_pago_val else None
 
-    ruc_dni = input("RUC o DNI del emisor/cliente: ").strip()
+    ruc_dni = input("RUC o DNI del cliente: ").strip()
+
     if not ruc_dni.isdigit() or len(ruc_dni) not in (8, 11):
         print("El RUC debe tener 11 dígitos y el DNI 8 dígitos.")
         return
 
-    nombre_emisor = input("Nombre o razón social del emisor/cliente: ").strip()
+    nombre_emisor = input("Nombre o razón social del cliente: ").strip()
+
     if not nombre_emisor:
-        print("El nombre no puede estar vacío.")
+        print("El nombre del cliente no puede estar vacío.")
         return
 
-    moneda = input("Moneda (PEN/USD): ").strip().upper()
+    moneda = input("Moneda PEN/USD: ").strip().upper()
+
     if moneda not in ("PEN", "USD"):
-        print("Moneda inválida. Use PEN o USD.")
+        print("La moneda debe ser PEN o USD.")
         return
 
     try:
-        subtotal = float(input("Subtotal (sin IGV): "))
+        subtotal = float(input("Subtotal sin IGV: ").strip())
+
         if subtotal <= 0:
-            print("El subtotal debe ser mayor a cero.")
+            print("El subtotal debe ser mayor que cero.")
             return
+
     except ValueError:
         print("El subtotal debe ser un número válido.")
         return
@@ -135,18 +156,19 @@ def registrar_comprobante():
     igv = round(subtotal * 0.18, 2)
     total = round(subtotal + igv, 2)
 
-    print(f"\nResumen del comprobante:")
-    print(f"  Tipo           : {tipo_nombre}")
-    print(f"  Serie-Número   : {serie}-{numero}")
-    print(f"  Emisor         : {nombre_emisor} ({ruc_dni})")
-    print(f"  Fecha emisión  : {fecha_emision_val}")
-    print(f"  Vencimiento    : {fecha_vencimiento_val}")
-    print(f"  Fecha pago     : {fecha_pago_val or 'Sin pagar'}")
-    print(f"  Subtotal       : {moneda} {subtotal:.2f}")
-    print(f"  IGV (18%)      : {moneda} {igv:.2f}")
-    print(f"  Total          : {moneda} {total:.2f}")
+    print("\n===== RESUMEN DEL COMPROBANTE =====")
+    print(f"Tipo          : {tipo_nombre}")
+    print(f"Documento     : {serie}-{numero}")
+    print(f"Cliente       : {nombre_emisor} ({ruc_dni})")
+    print(f"Fecha emisión : {fecha_emision_val}")
+    print(f"Vencimiento   : {fecha_vencimiento_val}")
+    print(f"Fecha pago    : {fecha_pago_val or 'Sin pagar'}")
+    print(f"Subtotal      : {moneda} {subtotal:.2f}")
+    print(f"IGV           : {moneda} {igv:.2f}")
+    print(f"Total         : {moneda} {total:.2f}")
 
     confirmar = input("\n¿Confirmar registro? (s/n): ").strip().lower()
+
     if confirmar != "s":
         print("Registro cancelado.")
         return
@@ -173,13 +195,26 @@ def registrar_comprobante():
                 estado_conciliacion
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente')
         """, (
-            tipo_nombre, tipo_codigo, serie, numero,
-            fecha_emision_val, fecha_vencimiento_val, fecha_pago_val,
-            ruc_dni, nombre_emisor, moneda, subtotal, igv, total
+            tipo_bd,
+            tipo_codigo,
+            serie,
+            numero,
+            fecha_emision_val,
+            fecha_vencimiento_val,
+            fecha_pago_val,
+            ruc_dni,
+            nombre_emisor,
+            moneda,
+            subtotal,
+            igv,
+            total
         ))
 
         conexion.commit()
         print("Comprobante registrado correctamente.")
+
+    except sqlite3.IntegrityError:
+        print("No se pudo registrar el comprobante. Verifique que la serie y número no estén repetidos.")
 
     except Exception as error:
         print(f"No se pudo registrar el comprobante: {error}")
@@ -190,20 +225,23 @@ def registrar_comprobante():
 
 def registrar_fecha_pago():
     print("\n===== REGISTRAR FECHA DE PAGO =====")
+
     serie = input("Serie (ej. F001): ").strip().upper()
     numero_input = input("Número correlativo: ").strip()
     fecha_pago = input("Fecha de pago real (YYYY-MM-DD): ").strip()
 
-    # Validaciones
-    ok, msg = validar_serie_para_tipo(serie, None)
+    ok, mensaje = validar_serie(serie)
     if not ok:
-        print(msg)
+        print(mensaje)
         return
-    ok, numero = validar_y_normalizar_numero(numero_input)
+
+    ok, numero = validar_numero_correlativo(numero_input)
     if not ok:
         print(numero)
         return
-    fecha_pago_val = validar_fecha(fecha_pago, required=True)
+
+    fecha_pago_val = validar_fecha(fecha_pago, requerida=True)
+
     if fecha_pago_val is False:
         print("Fecha de pago inválida. Use el formato YYYY-MM-DD.")
         return
@@ -225,7 +263,7 @@ def registrar_fecha_pago():
             print("Fecha de pago registrada correctamente.")
 
     except Exception as error:
-        print(f"Error al actualizar: {error}")
+        print(f"No se pudo actualizar la fecha de pago: {error}")
 
     finally:
         conexion.close()
@@ -241,7 +279,7 @@ def listar_comprobantes():
                ruc_dni, nombre_emisor, moneda,
                subtotal, igv, total, estado_conciliacion
         FROM comprobantes
-        ORDER BY fecha_emision DESC
+        ORDER BY fecha_emision DESC, id DESC
     """)
 
     comprobantes = cursor.fetchall()
@@ -268,7 +306,6 @@ def listar_pendientes_pago():
                subtotal, igv, total, estado_conciliacion
         FROM comprobantes
         WHERE fecha_pago IS NULL
-            AND tipo_codigo IN ('01', '03', '08')
         ORDER BY fecha_vencimiento ASC
     """)
 
@@ -287,14 +324,16 @@ def listar_pendientes_pago():
 
 def buscar_por_serie_numero():
     print("\n===== BUSCAR COMPROBANTE =====")
+
     serie = input("Serie (ej. F001): ").strip().upper()
     numero_input = input("Número correlativo: ").strip()
 
-    ok, msg = validar_serie_para_tipo(serie, None)
+    ok, mensaje = validar_serie(serie)
     if not ok:
-        print(msg)
+        print(mensaje)
         return
-    ok, numero = validar_y_normalizar_numero(numero_input)
+
+    ok, numero = validar_numero_correlativo(numero_input)
     if not ok:
         print(numero)
         return
@@ -326,6 +365,10 @@ def buscar_por_ruc():
 
     ruc_dni = input("Ingrese RUC o DNI: ").strip()
 
+    if not ruc_dni.isdigit() or len(ruc_dni) not in (8, 11):
+        print("Debe ingresar un RUC de 11 dígitos o DNI de 8 dígitos.")
+        return
+
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
@@ -336,7 +379,7 @@ def buscar_por_ruc():
                subtotal, igv, total, estado_conciliacion
         FROM comprobantes
         WHERE ruc_dni = ?
-        ORDER BY fecha_emision DESC
+        ORDER BY fecha_emision DESC, id DESC
     """, (ruc_dni,))
 
     resultados = cursor.fetchall()
@@ -363,7 +406,7 @@ def menu_comprobantes():
         print("6. Buscar por RUC/DNI")
         print("7. Volver al menú principal")
 
-        opcion = input("Seleccione una opción: ")
+        opcion = input("Seleccione una opción: ").strip()
 
         if opcion == "1":
             registrar_comprobante()

@@ -1,3 +1,4 @@
+from database.crear_tablas import crear_tablas
 from database.conexion import obtener_conexion
 
 
@@ -10,6 +11,7 @@ TRANSACCIONES_INICIALES = [
     ("2026-05-08", "OP-200006", "credito", "PEN", 700.00, "001-000111", "Cobranza antigua", "conciliado"),
 ]
 
+
 COMPROBANTES_INICIALES = [
     ("factura", "01", "F001", "00001001", "2026-05-01", "2026-05-31", None, "20100000001", "Cliente Andino", "PEN", 1271.19, 228.81, 1500.00, "pendiente"),
     ("factura", "01", "F001", "00001002", "2026-05-02", "2026-05-31", None, "20100000002", "Global Export", "USD", 1016.95, 183.05, 1200.00, "pendiente"),
@@ -18,25 +20,29 @@ COMPROBANTES_INICIALES = [
     ("boleta", "03", "B001", "00002001", "2026-05-06", "2026-05-06", "2026-05-08", "10100000001", "Cliente Retail", "PEN", 593.22, 106.78, 700.00, "conciliado"),
 ]
 
+
 PARES_CONCILIADOS = [
-    ("OP-200004", "F001", "1003"),
-    ("OP-200006", "B001", "2001"),
+    ("OP-200004", "F001", "00001003"),
+    ("OP-200006", "B001", "00002001"),
 ]
 
 
-def cargar_tablas():
+def cargar_datos_iniciales():
+    crear_tablas()
 
     conexion = obtener_conexion()
     cursor = conexion.cursor()
-    cursor.execute("PRAGMA foreign_keys = ON")
 
     cursor.execute("DELETE FROM conciliacion")
     cursor.execute("DELETE FROM comprobantes")
     cursor.execute("DELETE FROM transacciones_bancarias")
-    cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('transacciones_bancarias', 'comprobantes', 'conciliacion')")
 
-    cursor.executemany(
-        """
+    cursor.execute("""
+        DELETE FROM sqlite_sequence
+        WHERE name IN ('transacciones_bancarias', 'comprobantes', 'conciliacion')
+    """)
+
+    cursor.executemany("""
         INSERT INTO transacciones_bancarias (
             fecha_operacion,
             numero_operacion,
@@ -47,12 +53,9 @@ def cargar_tablas():
             descripcion,
             estado_conciliacion
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        TRANSACCIONES_INICIALES,
-    )
+    """, TRANSACCIONES_INICIALES)
 
-    cursor.executemany(
-        """
+    cursor.executemany("""
         INSERT INTO comprobantes (
             tipo_comprobante,
             tipo_codigo,
@@ -69,41 +72,41 @@ def cargar_tablas():
             total,
             estado_conciliacion
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        COMPROBANTES_INICIALES,
-    )
+    """, COMPROBANTES_INICIALES)
 
     for numero_operacion, serie, numero_correlativo in PARES_CONCILIADOS:
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT id
             FROM transacciones_bancarias
             WHERE numero_operacion = ?
-            """,
-            (numero_operacion,),
-        )
+        """, (numero_operacion,))
+
         transaccion = cursor.fetchone()
 
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT id
             FROM comprobantes
             WHERE serie = ? AND numero_correlativo = ?
-            """,
-            (serie, numero_correlativo),
-        )
+        """, (serie, numero_correlativo,))
+
         comprobante = cursor.fetchone()
 
         if transaccion and comprobante:
-            cursor.execute(
-                """
-                INSERT INTO conciliacion (transaccion_id, comprobante_id)
-                VALUES (?, ?)
-                """,
-                (transaccion[0], comprobante[0]),
-            )
+            cursor.execute("""
+                INSERT INTO conciliacion (
+                    transaccion_id,
+                    comprobante_id
+                ) VALUES (?, ?)
+            """, (transaccion[0], comprobante[0]))
 
     conexion.commit()
     conexion.close()
 
-    print("Carga inicial completada en transacciones, comprobantes y conciliacion.")
+    print("Carga inicial completada correctamente.")
+    print(f"Transacciones cargadas: {len(TRANSACCIONES_INICIALES)}")
+    print(f"Comprobantes cargados: {len(COMPROBANTES_INICIALES)}")
+    print(f"Conciliaciones cargadas: {len(PARES_CONCILIADOS)}")
+
+
+if __name__ == "__main__":
+    cargar_datos_iniciales()

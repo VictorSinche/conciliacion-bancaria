@@ -1,30 +1,69 @@
+import sqlite3
+from datetime import datetime
 from database.conexion import obtener_conexion
 
 
 def mostrar_transaccion(item):
     print(
         f"ID: {item[0]} | Fecha: {item[1]} | Operación: {item[2]} | "
-        f"Tipo: {item[3]} | Moneda: {item[4]} | Monto: {item[5]} | "
+        f"Tipo: {item[3]} | Moneda: {item[4]} | Monto: {item[5]:.2f} | "
         f"Cuenta: {item[6]} | Estado: {item[7]}"
     )
+
+
+def validar_fecha(fecha):
+    try:
+        datetime.strptime(fecha, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
 
 
 def registrar_transaccion():
     print("\n===== REGISTRAR TRANSACCIÓN BANCARIA =====")
 
-    fecha = input("Fecha de operación YYYY-MM-DD: ")
-    numero = input("Número de operación: ")
-    tipo = input("Tipo de operación credito/debito: ").lower()
-    moneda = input("Moneda PEN/USD: ").upper()
+    fecha = input("Fecha de operación YYYY-MM-DD: ").strip()
+
+    if not validar_fecha(fecha):
+        print("La fecha debe tener el formato correcto: YYYY-MM-DD.")
+        return
+
+    numero = input("Número de operación: ").strip()
+
+    if not numero:
+        print("El número de operación es obligatorio.")
+        return
+
+    tipo = input("Tipo de operación credito/debito: ").strip().lower().replace("é", "e")
+
+    if tipo not in ("credito", "debito"):
+        print("El tipo de operación debe ser credito o debito.")
+        return
+
+    moneda = input("Moneda PEN/USD: ").strip().upper()
+
+    if moneda not in ("PEN", "USD"):
+        print("La moneda debe ser PEN o USD.")
+        return
 
     try:
-        monto = float(input("Monto: "))
+        monto = float(input("Monto: ").strip())
+
+        if monto <= 0:
+            print("El monto debe ser mayor que cero.")
+            return
+
     except ValueError:
         print("El monto debe ser un número válido.")
         return
 
-    cuenta = input("Cuenta destino: ")
-    descripcion = input("Descripción opcional: ")
+    cuenta = input("Cuenta destino: ").strip()
+
+    if not cuenta:
+        print("La cuenta destino es obligatoria.")
+        return
+
+    descripcion = input("Descripción opcional: ").strip()
 
     conexion = obtener_conexion()
     cursor = conexion.cursor()
@@ -45,6 +84,9 @@ def registrar_transaccion():
         conexion.commit()
         print("Transacción registrada correctamente.")
 
+    except sqlite3.IntegrityError:
+        print("No se pudo registrar la transacción. Verifique que el número de operación no esté repetido.")
+
     except Exception as error:
         print(f"No se pudo registrar la transacción: {error}")
 
@@ -60,7 +102,7 @@ def listar_transacciones():
         SELECT id, fecha_operacion, numero_operacion, tipo_operacion,
                moneda, monto, cuenta_destino, estado_conciliacion
         FROM transacciones_bancarias
-        ORDER BY fecha_operacion DESC
+        ORDER BY fecha_operacion DESC, id DESC
     """)
 
     transacciones = cursor.fetchall()
@@ -79,7 +121,11 @@ def listar_transacciones():
 def buscar_por_numero_operacion():
     print("\n===== BUSCAR TRANSACCIÓN =====")
 
-    numero = input("Ingrese el número de operación: ")
+    numero = input("Ingrese el número de operación: ").strip()
+
+    if not numero:
+        print("Debe ingresar un número de operación.")
+        return
 
     conexion = obtener_conexion()
     cursor = conexion.cursor()
@@ -109,7 +155,7 @@ def menu_transacciones():
         print("3. Buscar por número de operación")
         print("4. Volver al menú principal")
 
-        opcion = input("Seleccione una opción: ")
+        opcion = input("Seleccione una opción: ").strip()
 
         if opcion == "1":
             registrar_transaccion()

@@ -2,9 +2,14 @@ import sqlite3
 from pathlib import Path
 
 
-RUTA_DB = Path("data/conciliacion_bancaria.db")
+BASE_DIR = Path(__file__).resolve().parent.parent
+RUTA_DB = BASE_DIR / "data" / "conciliacion_bancaria.db"
 
 
 def obtener_conexion():
     RUTA_DB.parent.mkdir(exist_ok=True)
-    return sqlite3.connect(RUTA_DB)
+
+    conexion = sqlite3.connect(RUTA_DB)
+    conexion.execute("PRAGMA foreign_keys = ON")
+
+    return conexion
